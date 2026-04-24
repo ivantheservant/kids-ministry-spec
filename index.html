@@ -261,8 +261,10 @@
 
   .checkbox-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 0.5rem;
+    /* Ensure all rows visible; no horizontal scroll */
+    width: 100%;
   }
 
   .check {
@@ -748,9 +750,31 @@
   // ============================================
   // PROMPT GENERATION
   // ============================================
+
+  // Defensive: explicitly force-sync checkbox visual state -> DOM state
+  // on every change, so label clicks never leave input in desync.
+  document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', function() {
+      // Force the attribute to match property, for any legacy code reading attributes
+      if (this.checked) {
+        this.setAttribute('checked', 'checked');
+      } else {
+        this.removeAttribute('checked');
+      }
+    });
+  });
+
   function getCheckedValues(name) {
-    return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`))
-      .map(el => el.value);
+    // Read directly from live DOM property (not attribute) — this is
+    // the source of truth regardless of any attribute/property desync
+    const checkboxes = document.querySelectorAll(`input[name="${name}"]`);
+    const result = [];
+    checkboxes.forEach(cb => {
+      if (cb.checked === true) {
+        result.push(cb.value);
+      }
+    });
+    return result;
   }
 
   function generate() {
@@ -865,6 +889,27 @@ If any parameter above is unclear or missing something important, ask me ONE cla
   }
 
   function resetForm() {
+    // 1. Reset all native form fields to HTML-declared defaults
+    const form = document.getElementById('form');
+    form.reset();
+
+    // 2. Explicitly reset textareas (form.reset doesn't always clear dynamic text)
+    document.getElementById('topic').value = '';
+    document.getElementById('other').value = '';
+
+    // 3. Re-apply checkbox default states (form.reset restores the `checked` attribute,
+    //    but we explicitly enforce to guard against browser state desync)
+    const resourceDefaults = [
+      "投影機 / 大電視 projector/TV",
+      "手工材料 craft supplies",
+      "茶點預算 snack budget"
+    ];
+    document.querySelectorAll('input[name="needs"]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('input[name="res"]').forEach(cb => {
+      cb.checked = resourceDefaults.includes(cb.value);
+    });
+
+    // 4. Hide output and scroll up
     document.getElementById('output').style.display = 'none';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
